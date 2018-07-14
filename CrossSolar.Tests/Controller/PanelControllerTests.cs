@@ -31,9 +31,10 @@ namespace CrossSolar.Tests.Controller
             };
 
             // Arrange
-
+          var controller = new PanelController(_panelRepositoryMock.Object);
             // Act
-            var result = await _panelController.Register(panel);
+            var result = await controller.Register(panel);
+            
 
             // Assert
             Assert.NotNull(result);

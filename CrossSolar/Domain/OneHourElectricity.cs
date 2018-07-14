@@ -12,4 +12,5 @@ namespace CrossSolar.Domain
 
         public DateTime DateTime { get; set; }
     }
+
 }

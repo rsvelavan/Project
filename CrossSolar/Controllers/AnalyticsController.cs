@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CrossSolar.Controllers
 {
-    [Route("panel")]
+    [Route("api/[controller]")]
     public class AnalyticsController : Controller
     {
         private readonly IAnalyticsRepository _analyticsRepository;
@@ -21,17 +21,16 @@ namespace CrossSolar.Controllers
         {
             _analyticsRepository = analyticsRepository;
             _panelRepository = panelRepository;
+
         }
 
+
+
         // GET panel/XXXX1111YYYY2222/analytics
-        [HttpGet("{banelId}/[controller]")]
-        public async Task<IActionResult> Get([FromRoute] string panelId)
+        //[HttpGet("{banelId}/[controller]")]
+        [HttpGet("{panelId}")]
+        public async Task<IActionResult> Get(string panelId)
         {
-            var panel = await _panelRepository.Query()
-                .FirstOrDefaultAsync(x => x.Serial.Equals(panelId, StringComparison.CurrentCultureIgnoreCase));
-
-            if (panel == null) return NotFound();
-
             var analytics = await _analyticsRepository.Query()
                 .Where(x => x.PanelId.Equals(panelId, StringComparison.CurrentCultureIgnoreCase)).ToListAsync();
 
@@ -42,32 +41,49 @@ namespace CrossSolar.Controllers
                     Id = c.Id,
                     KiloWatt = c.KiloWatt,
                     DateTime = c.DateTime
-                })
+                }).ToList()
             };
-
             return Ok(result);
         }
 
         // GET panel/XXXX1111YYYY2222/analytics/day
-        [HttpGet("{panelId}/[controller]/day")]
-        public async Task<IActionResult> DayResults([FromRoute] string panelId)
+        //[HttpGet("{panelId}/[controller]/day")]
+        [HttpGet]
+        [Route("DayResults/{pDate}")]
+        public async Task<IActionResult> DayResults(string pDate)
         {
-            var result = new List<OneDayElectricityModel>();
+            DateTime giveDate = Convert.ToDateTime(pDate);
+            
+            var analytics = await _analyticsRepository.Query()
+                                    .Where(x => x.DateTime.Year == giveDate.Year
+                                    && x.DateTime.Month == giveDate.Month
+                                    && x.DateTime.Day == giveDate.Day).ToListAsync();
+            var result = analytics.AsQueryable()
+                         .GroupBy(k => k.DateTime.ToShortDateString())
+                         .Select(g => new
+                         {
+                             DateTime = g.Key.ToString(),
+                             Sum = g.Sum(i => i.KiloWatt),
+                             Average = g.Average(i => i.KiloWatt),
+                             Minimum = g.Min(i => i.KiloWatt),
+                             Maximum = g.Max(i => i.KiloWatt)
+                         }).ToList();
+
 
             return Ok(result);
         }
 
         // POST panel/XXXX1111YYYY2222/analytics
-        [HttpPost("{panelId}/[controller]")]
-        public async Task<IActionResult> Post([FromRoute] string panelId, [FromBody] OneHourElectricityModel value)
+        [HttpPost]
+        public async Task<IActionResult> Post([FromBody] OneHourElectricityInsert value)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var oneHourElectricityContent = new OneHourElectricity
             {
-                PanelId = panelId,
                 KiloWatt = value.KiloWatt,
-                DateTime = DateTime.UtcNow
+                DateTime = DateTime.UtcNow,
+                PanelId = value.PanelId
             };
 
             await _analyticsRepository.InsertAsync(oneHourElectricityContent);
@@ -76,10 +92,12 @@ namespace CrossSolar.Controllers
             {
                 Id = oneHourElectricityContent.Id,
                 KiloWatt = oneHourElectricityContent.KiloWatt,
-                DateTime = oneHourElectricityContent.DateTime
+                DateTime = oneHourElectricityContent.DateTime,
+                PanelId = oneHourElectricityContent.PanelId
             };
 
-            return Created($"panel/{panelId}/analytics/{result.Id}", result);
+            return Created($"panel/{result.PanelId}/analytics/{result.Id}", result);
+
         }
     }
 }
